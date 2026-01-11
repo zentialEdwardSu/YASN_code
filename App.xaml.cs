@@ -5,30 +5,40 @@
     /// </summary>
     public partial class App : System.Windows.Application
     {
-        private System.Windows.Forms.NotifyIcon? _notifyIcon;
-        public static WebDavSyncManager SyncManager { get; private set; }
+        private NotifyIcon? _notifyIcon;
+        public static Sync.SyncManager? SyncManager { get; private set; }
+        private static System.Threading.Mutex? _singleInstanceMutex;
+        private const string MutexName = "Global\\YASN_SingleInstance";
 
         protected override void OnStartup(System.Windows.StartupEventArgs e)
         {
+            if (!EnsureSingleInstance())
+            {
+                System.Windows.MessageBox.Show("YASN 已在运行，无法启动多个实例。", "已在运行", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+
             base.OnStartup(e);
 
             // Initialize WebDAV sync manager
-            SyncManager = new WebDavSyncManager();
+            SyncManager = new Sync.SyncManager();
+            Logging.AppLogger.Info("YASN Started");
 
             // Hide main window, only show tray icon
             MainWindow = new MainWindow();
             MainWindow.Hide();
 
             // Create tray icon
-            _notifyIcon = new System.Windows.Forms.NotifyIcon();
+            _notifyIcon = new NotifyIcon();
             
             // Load icon from the same icon file used by the EXE
             try
             {
-                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "favicon.ico");
+                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "amy.ico");
                 if (System.IO.File.Exists(iconPath))
                 {
-                    _notifyIcon.Icon = new System.Drawing.Icon(iconPath);
+                    _notifyIcon.Icon = new Icon(iconPath);
                 }
                 else
                 {
@@ -46,19 +56,19 @@
             _notifyIcon.Text = "YASN - Window Manager";
 
             // Create context menu
-            var contextMenu = new System.Windows.Forms.ContextMenuStrip();
+            var contextMenu = new ContextMenuStrip();
             
-            var newWindowMenuItem = new System.Windows.Forms.ToolStripMenuItem("NewNote(&N)");
+            var newWindowMenuItem = new ToolStripMenuItem("NewNote(&N)");
             newWindowMenuItem.DropDownItems.Add("Normal(&P)", null, CreateNormalWindowMenuItem_Click);
             newWindowMenuItem.DropDownItems.Add("TopMost(&T)", null, CreateTopWindowMenuItem_Click);
             newWindowMenuItem.DropDownItems.Add("BottomMost(&B)", null, CreateBottomWindowMenuItem_Click);
             
-            var separatorMenuItem = new System.Windows.Forms.ToolStripSeparator();
+            var separatorMenuItem = new ToolStripSeparator();
             
-            var showMainMenuItem = new System.Windows.Forms.ToolStripMenuItem("Main(&S)");
+            var showMainMenuItem = new ToolStripMenuItem("Main(&S)");
             showMainMenuItem.Click += (s, args) => ShowMainWindow();
             
-            var exitMenuItem = new System.Windows.Forms.ToolStripMenuItem("Exit(&X)");
+            var exitMenuItem = new ToolStripMenuItem("Exit(&X)");
             exitMenuItem.Click += (s, args) => ExitApplication();
 
             contextMenu.Items.Add(newWindowMenuItem);
@@ -77,6 +87,42 @@
                 System.Diagnostics.Debug.WriteLine("App startup: calling RestoreOpenNotes");
                 NoteManager.Instance.RestoreOpenNotes();
             }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+
+        protected override void OnExit(System.Windows.ExitEventArgs e)
+        {
+            // Ensure flag is set even if ExitApplication wasn't called
+            FloatingWindow.SetApplicationShuttingDown();
+            
+            // Dispose sync manager
+            SyncManager?.Dispose();
+            
+            _notifyIcon?.Dispose();
+            base.OnExit(e);
+            try
+            {
+                _singleInstanceMutex?.ReleaseMutex();
+                _singleInstanceMutex?.Dispose();
+                _singleInstanceMutex = null;
+            }
+            catch
+            {
+                // ignored
+            }
+        }
+
+        private bool EnsureSingleInstance()
+        {
+            try
+            {
+                bool createdNew;
+                _singleInstanceMutex = new System.Threading.Mutex(true, MutexName, out createdNew);
+                return createdNew;
+            }
+            catch
+            {
+                return true; // fail open to avoid blocking launch if mutex creation fails
+            }
         }
 
         private void CreateTopWindowMenuItem_Click(object sender, System.EventArgs e)
@@ -124,18 +170,6 @@
             
             _notifyIcon?.Dispose();
             Current.Shutdown();
-        }
-
-        protected override void OnExit(System.Windows.ExitEventArgs e)
-        {
-            // Ensure flag is set even if ExitApplication wasn't called
-            FloatingWindow.SetApplicationShuttingDown();
-            
-            // Dispose sync manager
-            SyncManager?.Dispose();
-            
-            _notifyIcon?.Dispose();
-            base.OnExit(e);
         }
     }
 }
