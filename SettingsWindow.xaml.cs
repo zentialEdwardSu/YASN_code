@@ -34,12 +34,15 @@ namespace YASN
             var allFields = new System.Collections.Generic.List<SettingField>();
 
             var generalFields = GeneralSettingsFieldFactory.Create();
+            var editorFields = EditorSettingsFieldFactory.Create();
             var webDavFields = WebDavSettingsFieldFactory.Create();
 
             allFields.Add(generalFields.AutoStartField);
             allFields.Add(generalFields.AutoCollapseNoteChromeField);
             allFields.Add(generalFields.LogSizeField);
             allFields.Add(generalFields.FloatingTaskbarVisibilityField);
+            allFields.Add(generalFields.PreviewStyleField);
+            allFields.Add(editorFields.EnterModeField);
             allFields.Add(webDavFields.ServerUrlField);
             allFields.Add(webDavFields.UserField);
             allFields.Add(webDavFields.PasswordField);
@@ -59,6 +62,15 @@ namespace YASN
             generalModule.Fields.Add(generalFields.AutoCollapseNoteChromeField);
             generalModule.Fields.Add(generalFields.LogSizeField);
             generalModule.Fields.Add(generalFields.FloatingTaskbarVisibilityField);
+            generalModule.Fields.Add(generalFields.PreviewStyleField);
+
+            var editorModule = new SettingModule
+            {
+                Key = "editor",
+                Title = "编辑",
+                Description = "控制便签编辑行为。"
+            };
+            editorModule.Fields.Add(editorFields.EnterModeField);
 
             var webDavModule = new SettingModule
             {
@@ -78,6 +90,14 @@ namespace YASN
             _settingsStore.ApplyValues(allFields);
             generalFields.FloatingTaskbarVisibilityField.Value =
                 FloatingWindowTaskbarVisibility.NormalizeValue(generalFields.FloatingTaskbarVisibilityField.Value);
+            var previewStyleNormalized = ConfigurePreviewStyleField(generalFields.PreviewStyleField);
+            var normalizedEditorEnterMode = EditorDisplayModeSettings.ToValue(
+                EditorDisplayModeSettings.ParseValue(editorFields.EnterModeField.Value));
+            var editorModeNormalized = !string.Equals(
+                editorFields.EnterModeField.Value,
+                normalizedEditorEnterMode,
+                StringComparison.Ordinal);
+            editorFields.EnterModeField.Value = normalizedEditorEnterMode;
 
             generalFields.AutoStartField.OnChanged = field =>
             {
@@ -99,6 +119,32 @@ namespace YASN
                 _settingsStore.PersistField(field);
                 ApplyFloatingWindowTaskbarVisibilityToOpenWindows();
             };
+            generalFields.PreviewStyleField.OnChanged = field =>
+            {
+                var resolved = PreviewStyleManager.ResolveStyle(field.Value);
+                if (!string.Equals(field.Value, resolved, StringComparison.OrdinalIgnoreCase))
+                {
+                    field.Value = resolved;
+                    return;
+                }
+
+                _settingsStore.PersistField(field);
+                ApplyPreviewStyleToOpenWindows();
+                Logging.AppLogger.Info($"Preview style switched to '{resolved}'.");
+            };
+            if (previewStyleNormalized)
+            {
+                _settingsStore.PersistField(generalFields.PreviewStyleField);
+            }
+            editorFields.EnterModeField.OnChanged = field =>
+            {
+                _settingsStore.PersistField(field);
+                Logging.AppLogger.Info($"Editor enter mode set to '{field.Value}'.");
+            };
+            if (editorModeNormalized)
+            {
+                _settingsStore.PersistField(editorFields.EnterModeField);
+            }
 
             foreach (var field in new[]
                      {
@@ -134,6 +180,7 @@ namespace YASN
             ApplySyncInterval(webDavFields.SyncIntervalField.Value);
             ApplyFloatingWindowTaskbarVisibilityToOpenWindows();
             ApplyNoteChromeAutoCollapseToOpenWindows();
+            ApplyPreviewStyleToOpenWindows();
 
             generalModule.Actions.Add(new SettingAction
             {
@@ -182,6 +229,7 @@ namespace YASN
             });
 
             ViewModel.Modules.Add(generalModule);
+            ViewModel.Modules.Add(editorModule);
             ViewModel.Modules.Add(webDavModule);
             NavList.SelectedIndex = 0;
         }
@@ -313,6 +361,32 @@ namespace YASN
             {
                 note.Window?.RefreshChromeBehaviorFromSettings();
             }
+        }
+
+        private static void ApplyPreviewStyleToOpenWindows()
+        {
+            foreach (var note in NoteManager.Instance.Notes)
+            {
+                note.Window?.RefreshPreviewStyleFromSettings();
+            }
+        }
+
+        private static bool ConfigurePreviewStyleField(SettingField field)
+        {
+            field.Options.Clear();
+            foreach (var stylePath in PreviewStyleManager.ListStyles())
+            {
+                field.Options.Add(new SettingOption
+                {
+                    Label = stylePath,
+                    Value = stylePath
+                });
+            }
+
+            var resolved = PreviewStyleManager.ResolveStyle(field.Value);
+            var changed = !string.Equals(field.Value, resolved, StringComparison.OrdinalIgnoreCase);
+            field.Value = resolved;
+            return changed;
         }
 
         private void ApplyLogSize(string value)
