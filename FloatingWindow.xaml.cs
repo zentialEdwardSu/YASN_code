@@ -104,6 +104,8 @@ namespace YASN
         private readonly string _attachmentDirectory;
         private readonly string _backgroundImageDirectory;
         private readonly string _htmlCachePath;
+        private FileSystemWatcher? _activeStyleWatcher;
+        private FileSystemWatcher? _debugSourceStyleWatcher;
 
         private bool _previewReady;
         private bool _isPreviewInitInProgress;
@@ -166,6 +168,7 @@ namespace YASN
             BackgroundImageBorder.Opacity = noteData.BackgroundImageOpacity;
             LoadContent(noteData.Content);
             RefreshPreviewStyleFromSettings(forceRender: false);
+            ConfigurePreviewStyleWatchers();
 
             _markdownPipeline = MarkdownPipelineConfig.Create();
 
@@ -348,7 +351,7 @@ namespace YASN
                 PreviewContainer.CornerRadius = new CornerRadius(4);
                 PreviewContainer.BorderThickness = new Thickness(1);
                 PreviewContainer.BorderBrush = new SolidColorBrush(Color.FromArgb(0x25, 0x00, 0x00, 0x00));
-                PreviewContainer.Background = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
+                PreviewContainer.Background = Brushes.Transparent;
             }
             else if (mode == EditorDisplayMode.PreviewOnly)
             {
@@ -628,7 +631,11 @@ namespace YASN
                 await PreviewWebView.EnsureCoreWebView2Async();
                 PreviewWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 PreviewWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
+#if DEBUG
                 PreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+#else
+                PreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+#endif
                 await PreviewWebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(PreviewRightClickBridgeScript);
                 PreviewWebView.CoreWebView2.ContextMenuRequested += PreviewCoreWebView2_ContextMenuRequested;
                 PreviewWebView.CoreWebView2.NavigationStarting += PreviewCoreWebView2_NavigationStarting;
@@ -673,7 +680,7 @@ namespace YASN
                 var markdown = GetContent();
                 var htmlBody = global::Markdig.Markdown.ToHtml(markdown ?? string.Empty, _markdownPipeline);
                 var stylePath = PreviewStyleManager.ToStyleAbsolutePath(_previewStyleRelativePath);
-                var styleVersion = File.Exists(stylePath) ? File.GetLastWriteTimeUtc(stylePath).Ticks : DateTime.UtcNow.Ticks;
+                var styleVersion = File.Exists(stylePath) ? GetStyleCacheToken(stylePath) : DateTime.UtcNow.Ticks;
                 var styleHref = PreviewStyleManager.BuildStyleHref(_previewStyleRelativePath, styleVersion);
 
                 if (_isPreviewDocumentReady)
@@ -717,7 +724,7 @@ namespace YASN
             var styleJson = JsonSerializer.Serialize(styleHref);
             var ratioLiteral = scrollRatio.ToString("0.########", CultureInfo.InvariantCulture);
 
-            var script = $"(() => {{ const html = {htmlJson}; const theme = {themeJson}; const styleHref = {styleJson}; const ratio = {ratioLiteral}; const stickToBottom = ratio >= 0.999; const root = document.scrollingElement || document.documentElement || document.body; const page = document.getElementById('page'); if (!root || !page) return; page.innerHTML = html; document.body.className = theme; const style = document.getElementById('yasn-style'); if (style) style.setAttribute('href', styleHref); const apply = () => {{ const max = Math.max(0, root.scrollHeight - root.clientHeight); const target = stickToBottom ? max : Math.max(0, Math.min(1, ratio)) * max; if (typeof root.scrollTo === 'function') {{ root.scrollTo({{ top: target, behavior: stickToBottom ? 'auto' : 'smooth' }}); }} else {{ root.scrollTop = target; }} }}; apply(); requestAnimationFrame(apply); setTimeout(apply, 80); }})();";
+            var script = $"(() => {{ const html = {htmlJson}; const theme = {themeJson}; const styleHref = {styleJson}; const ratio = {ratioLiteral}; const stickToBottom = ratio >= 0.999; const root = document.scrollingElement || document.documentElement || document.body; const page = document.getElementById('page'); if (!root || !page) return; document.body.className = theme; const style = document.getElementById('yasn-style'); if (style && style.getAttribute('href') !== styleHref) style.setAttribute('href', styleHref); page.innerHTML = html; const apply = () => {{ const max = Math.max(0, root.scrollHeight - root.clientHeight); const target = stickToBottom ? max : Math.max(0, Math.min(1, ratio)) * max; if (typeof root.scrollTo === 'function') {{ root.scrollTo({{ top: target, behavior: stickToBottom ? 'auto' : 'smooth' }}); }} else {{ root.scrollTop = target; }} }}; apply(); requestAnimationFrame(apply); setTimeout(apply, 80); }})();";
             await PreviewWebView.ExecuteScriptAsync(script);
         }
 
@@ -823,7 +830,7 @@ namespace YASN
 <html>
 <head>
 <meta charset='utf-8' />
-<meta http-equiv='Content-Security-Policy' content=""default-src 'self' https://yasn.local data:; img-src 'self' https://yasn.local data: file:; style-src 'self' 'unsafe-inline';"" />
+<meta http-equiv='Content-Security-Policy' content=""default-src 'self' https://yasn.local data:; img-src 'self' https://yasn.local data: file:; style-src 'self' https://yasn.local 'unsafe-inline';"" />
 <base href='https://yasn.local/' />
 <link id='yasn-style' rel='stylesheet' href='{styleHref}' />
 </head>
@@ -833,6 +840,19 @@ namespace YASN
 </div>
 </body>
 </html>";
+        }
+
+        private static long GetStyleCacheToken(string stylePath)
+        {
+            try
+            {
+                var info = new FileInfo(stylePath);
+                return info.LastWriteTimeUtc.Ticks ^ info.Length;
+            }
+            catch
+            {
+                return DateTime.UtcNow.Ticks;
+            }
         }
 
         private void InsertImage_Click(object sender, RoutedEventArgs e)
@@ -1043,6 +1063,7 @@ namespace YASN
             {
                 AppLogger.Debug($"Note {NoteData.Id} preview style changed: '{_previewStyleRelativePath}' -> '{resolvedStyle}'.");
                 _previewStyleRelativePath = resolvedStyle;
+                ConfigurePreviewStyleWatchers();
             }
 
             if (forceRender)
@@ -1050,6 +1071,112 @@ namespace YASN
                 SchedulePreviewRender();
             }
         }
+
+        private void ConfigurePreviewStyleWatchers()
+        {
+            try
+            {
+                _activeStyleWatcher?.Dispose();
+                _activeStyleWatcher = null;
+                _debugSourceStyleWatcher?.Dispose();
+                _debugSourceStyleWatcher = null;
+
+                var activeStylePath = PreviewStyleManager.ToStyleAbsolutePath(_previewStyleRelativePath);
+                var activeDirectory = Path.GetDirectoryName(activeStylePath);
+                if (!string.IsNullOrEmpty(activeDirectory))
+                {
+                    Directory.CreateDirectory(activeDirectory);
+                }
+
+                if (!string.IsNullOrEmpty(activeDirectory) && File.Exists(activeStylePath))
+                {
+                    _activeStyleWatcher = new FileSystemWatcher(activeDirectory, Path.GetFileName(activeStylePath))
+                    {
+                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime | NotifyFilters.FileName,
+                        EnableRaisingEvents = true
+                    };
+                    _activeStyleWatcher.Changed += (_, _) => QueuePreviewStyleRefresh();
+                    _activeStyleWatcher.Created += (_, _) => QueuePreviewStyleRefresh();
+                    _activeStyleWatcher.Renamed += (_, _) => QueuePreviewStyleRefresh();
+                }
+
+#if DEBUG
+                var sourceStylePath = TryResolveDebugSourceStylePath(_previewStyleRelativePath);
+                if (!string.IsNullOrEmpty(sourceStylePath) &&
+                    !string.Equals(sourceStylePath, activeStylePath, StringComparison.OrdinalIgnoreCase) &&
+                    File.Exists(sourceStylePath))
+                {
+                    var sourceDirectory = Path.GetDirectoryName(sourceStylePath);
+                    if (!string.IsNullOrEmpty(sourceDirectory))
+                    {
+                        _debugSourceStyleWatcher = new FileSystemWatcher(sourceDirectory, Path.GetFileName(sourceStylePath))
+                        {
+                            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime | NotifyFilters.FileName,
+                            EnableRaisingEvents = true
+                        };
+
+                        void SyncAndRefresh()
+                        {
+                            try
+                            {
+                                File.Copy(sourceStylePath, activeStylePath, overwrite: true);
+                            }
+                            catch
+                            {
+                            }
+
+                            QueuePreviewStyleRefresh();
+                        }
+
+                        _debugSourceStyleWatcher.Changed += (_, _) => SyncAndRefresh();
+                        _debugSourceStyleWatcher.Created += (_, _) => SyncAndRefresh();
+                        _debugSourceStyleWatcher.Renamed += (_, _) => SyncAndRefresh();
+                    }
+                }
+#endif
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn($"Failed to configure preview style watcher: {ex.Message}");
+            }
+        }
+
+        private void QueuePreviewStyleRefresh()
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                RefreshPreviewStyleFromSettings(forceRender: true);
+            }), DispatcherPriority.Background);
+        }
+
+#if DEBUG
+        private static string? TryResolveDebugSourceStylePath(string relativeStylePath)
+        {
+            try
+            {
+                var baseDir = new DirectoryInfo(AppPaths.BaseDirectory);
+                for (var current = baseDir; current != null; current = current.Parent)
+                {
+                    var csproj = Path.Combine(current.FullName, "YASN.csproj");
+                    if (!File.Exists(csproj))
+                    {
+                        continue;
+                    }
+
+                    var candidate = Path.Combine(current.FullName, "style", relativeStylePath.Replace('/', Path.DirectorySeparatorChar));
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+#endif
 
         private void Timer_Tick(object sender, EventArgs e)
         {
@@ -1092,6 +1219,25 @@ namespace YASN
 
         private void FloatingWindow_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+#if DEBUG
+            var isOpenDevToolsShortcut = e.Key == Key.F12 ||
+                                         (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I);
+            if (isOpenDevToolsShortcut)
+            {
+                try
+                {
+                    PreviewWebView.CoreWebView2?.OpenDevToolsWindow();
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Warn($"Failed to open WebView2 DevTools: {ex.Message}");
+                }
+
+                e.Handled = true;
+                return;
+            }
+#endif
+
             if (!NoteData.IsEditMode)
             {
                 return;
@@ -1791,6 +1937,8 @@ namespace YASN
             _bottomMostTimer?.Stop();
             _previewDebounceTimer?.Stop();
             _chromeHoverTimer?.Stop();
+            _activeStyleWatcher?.Dispose();
+            _debugSourceStyleWatcher?.Dispose();
 
             lock (_bottomMostLock)
             {
@@ -1816,7 +1964,28 @@ namespace YASN
             ApplyTheme(NoteData.IsDarkMode);
             UpdateThemeToggleButton();
             NoteManager.Instance.UpdateNote(NoteData);
-            SchedulePreviewRender();
+            _ = ApplyPreviewThemeClassAsync(NoteData.IsDarkMode);
+            _previewDebounceTimer.Stop();
+            _ = RenderPreviewAsync();
+        }
+
+        private async Task ApplyPreviewThemeClassAsync(bool isDarkMode)
+        {
+            if (!_previewReady || PreviewWebView.CoreWebView2 == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var themeClass = isDarkMode ? "theme-dark" : "theme-light";
+                var script = $"(() => {{ if (document.body) document.body.className = '{themeClass}'; }})();";
+                await PreviewWebView.ExecuteScriptAsync(script);
+            }
+            catch
+            {
+                // ignore immediate theme apply failures
+            }
         }
 
         private void UpdateThemeToggleButton()
@@ -1841,7 +2010,7 @@ namespace YASN
                 StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0xEC, 0xF0, 0xF1));
                 MarkdownToolbar.Background = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00));
                 ContentTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0xEC, 0xF0, 0xF1));
-                ContentTextBox.Background = new SolidColorBrush(Color.FromArgb(0x20, 0x00, 0x00, 0x00));
+                ContentTextBox.Background = new SolidColorBrush(Color.FromArgb(0x80, 0x00, 0x00, 0x00));
             }
             else
             {
@@ -1850,7 +2019,7 @@ namespace YASN
                 StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x2C, 0x3E, 0x50));
                 MarkdownToolbar.Background = new SolidColorBrush(Color.FromArgb(0x30, 0xE0, 0xE0, 0xE0));
                 ContentTextBox.Foreground = new SolidColorBrush(Color.FromRgb(0x2C, 0x3E, 0x50));
-                ContentTextBox.Background = Brushes.Transparent;
+                ContentTextBox.Background = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
             }
         }
 

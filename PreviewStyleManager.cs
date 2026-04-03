@@ -153,13 +153,21 @@ namespace YASN
                     Directory.CreateDirectory(destinationDir);
                 }
 
-                if (File.Exists(destination))
+                var shouldCopy = !File.Exists(destination);
+                if (!shouldCopy)
+                {
+                    var sourceWriteTime = File.GetLastWriteTimeUtc(sourcePath);
+                    var destinationWriteTime = File.GetLastWriteTimeUtc(destination);
+                    shouldCopy = sourceWriteTime > destinationWriteTime;
+                }
+
+                if (!shouldCopy)
                 {
                     continue;
                 }
 
-                File.Copy(sourcePath, destination, overwrite: false);
-                AppLogger.Info($"Installed bundled preview style: {relative}");
+                File.Copy(sourcePath, destination, overwrite: true);
+                AppLogger.Info($"Synced bundled preview style: {relative}");
             }
         }
 

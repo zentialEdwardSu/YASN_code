@@ -15,20 +15,19 @@ body {
 body.theme-light {
   --fg: #253341;
   --muted: #6a7d90;
-  --bg: #fafbfc;
+  --page-bg: rgba(255, 255, 255, 0.6);
   --panel: #f4f7fa;
   --border: #d8dee6;
-  --code-bg: #f1f4f7;
   --link: #0067c0;
 }
 
 body.theme-dark {
   --fg: #e9eef2;
   --muted: #8fa1b5;
-  --bg: #15191d;
+  --page-bg: rgba(0, 0, 0, 0.6);
   --panel: #1a2026;
   --border: #2a343d;
-  --code-bg: #1f252b;
+
   --link: #7bc6ff;
 }
 
@@ -43,8 +42,7 @@ body {
   box-sizing: border-box;
   overflow: auto;
   padding: 16px 20px;
-  background: var(--bg);
-  border-radius: 8px;
+  background: var(--page-bg);
 }
 
 h1,
@@ -58,6 +56,7 @@ h6 {
 
 p {
   margin: 0.4em 0 0.8em;
+  font-size: 16px;
 }
 
 ul,
@@ -124,7 +123,9 @@ td {
 }
 
 img {
-  max-width: 100%;
+  width: 80%;
+  display: block; 
+  margin: 0.6em auto;
   height: auto;
   border-radius: 4px;
 }
