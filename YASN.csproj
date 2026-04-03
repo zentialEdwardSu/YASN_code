@@ -52,13 +52,14 @@
     </Content>
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <PublishTrimmed>false</PublishTrimmed>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-  </PropertyGroup>
+<PropertyGroup Condition="'$(Configuration)'=='Release'">
+  <PublishSingleFile>true</PublishSingleFile>
+  <SelfContained>false</SelfContained>
+  <PublishReadyToRun>false</PublishReadyToRun>
+  <PublishTrimmed>false</PublishTrimmed>
+  <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+  <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  <DebugType>none</DebugType>
+  <DebugSymbols>false</DebugSymbols>
+</PropertyGroup>
 </Project>

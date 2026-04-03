@@ -7,6 +7,7 @@ namespace YASN.Settings
         internal required SettingField LogSizeField { get; init; }
         internal required SettingField FloatingTaskbarVisibilityField { get; init; }
         internal required SettingField PreviewStyleField { get; init; }
+        internal required SettingField DataDirectoryField { get; init; }
     }
 
     internal static class GeneralSettingsFieldFactory
@@ -84,13 +85,25 @@ namespace YASN.Settings
                 Value = global::YASN.PreviewStyleManager.DefaultStyleRelativePath
             });
 
+            var dataDirectoryField = new SettingField
+            {
+                Key = global::YASN.AppPaths.DataDirectorySettingKey,
+                Title = "Data directory",
+                Description = "设置 YASN 读取 JSON 数据的目录（例如 notes.index.json）。支持绝对路径或相对程序目录路径，重启后生效。",
+                FieldType = SettingFieldType.Text,
+                Value = global::YASN.AppPaths.DataDirectory,
+                ShouldSync = false,
+                EnableFolderBrowse = true
+            };
+
             return new GeneralSettingFields
             {
                 AutoStartField = autoStartField,
                 AutoCollapseNoteChromeField = autoCollapseNoteChromeField,
                 LogSizeField = logSizeField,
                 FloatingTaskbarVisibilityField = floatingTaskbarVisibilityField,
-                PreviewStyleField = previewStyleField
+                PreviewStyleField = previewStyleField,
+                DataDirectoryField = dataDirectoryField
             };
         }
     }

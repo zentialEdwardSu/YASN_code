@@ -26,6 +26,7 @@ namespace YASN.Settings
         public string? Description { get; set; }
         public SettingFieldType FieldType { get; set; }
         public bool ShouldSync { get; set; }
+        public bool EnableFolderBrowse { get; set; }
 
         [field: AllowNull, MaybeNull]
         public string Value

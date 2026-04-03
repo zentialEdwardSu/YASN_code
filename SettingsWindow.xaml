@@ -142,22 +142,51 @@
                                                         </ui:ToggleSwitch.Style>
                                                     </ui:ToggleSwitch>
                                                     <!-- Text -->
-                                                    <TextBox Grid.Column="1"
-                                                             VerticalAlignment="Center"
-                                                             Padding="8"
-                                                             Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                                                        <TextBox.Style>
-                                                            <Style TargetType="TextBox"
-                                                                   BasedOn="{StaticResource {x:Type TextBox}}">
-                                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding FieldType}" Value="{x:Static settings:SettingFieldType.Text}">
-                                                                        <Setter Property="Visibility" Value="Visible"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBox.Style>
-                                                    </TextBox>
+                                                    <Grid Grid.Column="1">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <TextBox Grid.Column="0"
+                                                                 VerticalAlignment="Center"
+                                                                 Padding="8"
+                                                                 Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                                                            <TextBox.Style>
+                                                                <Style TargetType="TextBox"
+                                                                       BasedOn="{StaticResource {x:Type TextBox}}">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding FieldType}" Value="{x:Static settings:SettingFieldType.Text}">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBox.Style>
+                                                        </TextBox>
+
+                                                        <Button Grid.Column="1"
+                                                                Content="浏览..."
+                                                                Width="64"
+                                                                Height="28"
+                                                                VerticalAlignment="Center"
+                                                                Margin="6,0,0,0"
+                                                                Padding="6,0"
+                                                                Tag="{Binding}"
+                                                                Click="BrowseDataDirectoryButton_Click"
+                                                                Visibility="Collapsed">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding EnableFolderBrowse}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                    </Grid>
                                                     <!-- Select -->
                                                     <ComboBox Grid.Column="1"
                                                               VerticalAlignment="Center"

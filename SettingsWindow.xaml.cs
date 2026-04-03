@@ -1,9 +1,11 @@
-﻿using System.Windows;
+﻿using System.IO;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using YASN.Settings;
 using YASN.Sync.WebDav;
 using Button = System.Windows.Controls.Button;
+using FolderBrowserDialog = System.Windows.Forms.FolderBrowserDialog;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
@@ -42,6 +44,7 @@ namespace YASN
             allFields.Add(generalFields.LogSizeField);
             allFields.Add(generalFields.FloatingTaskbarVisibilityField);
             allFields.Add(generalFields.PreviewStyleField);
+            allFields.Add(generalFields.DataDirectoryField);
             allFields.Add(editorFields.EnterModeField);
             allFields.Add(webDavFields.ServerUrlField);
             allFields.Add(webDavFields.UserField);
@@ -63,6 +66,7 @@ namespace YASN
             generalModule.Fields.Add(generalFields.LogSizeField);
             generalModule.Fields.Add(generalFields.FloatingTaskbarVisibilityField);
             generalModule.Fields.Add(generalFields.PreviewStyleField);
+            generalModule.Fields.Add(generalFields.DataDirectoryField);
 
             var editorModule = new SettingModule
             {
@@ -194,6 +198,18 @@ namespace YASN
                 Label = "导入设置",
                 ExecuteAsync = () => Task.FromResult(ImportSettings())
             });
+            generalModule.Actions.Add(new SettingAction
+            {
+                Key = "settings.dataDirectory.browse",
+                Label = "浏览数据目录",
+                ExecuteAsync = () => Task.FromResult(BrowseDataDirectory(generalFields.DataDirectoryField))
+            });
+            generalModule.Actions.Add(new SettingAction
+            {
+                Key = "settings.dataDirectory.apply",
+                Label = "应用数据目录",
+                ExecuteAsync = () => Task.FromResult(ApplyDataDirectory(generalFields.DataDirectoryField))
+            });
 
             webDavModule.Actions.Add(new SettingAction
             {
@@ -275,6 +291,68 @@ namespace YASN
 
             BuildModules();
             return "设置已导入并生效。";
+        }
+
+        private string ApplyDataDirectory(SettingField dataDirectoryField)
+        {
+            if (!AppPaths.TryNormalizeDataDirectory(dataDirectoryField.Value, out var normalizedPath, out var errorMessage))
+            {
+                return $"数据目录无效: {errorMessage}";
+            }
+
+            dataDirectoryField.Value = normalizedPath;
+            _settingsStore.PersistField(dataDirectoryField);
+            return $"数据目录已保存为: {normalizedPath}。请重启 YASN 后生效。";
+        }
+
+        private string BrowseDataDirectory(SettingField dataDirectoryField)
+        {
+            if (TryBrowseDataDirectory(dataDirectoryField, out var selectedPath))
+            {
+                dataDirectoryField.Value = selectedPath;
+                return $"已选择数据目录: {selectedPath}";
+            }
+
+            return "已取消选择。";
+        }
+
+        private void BrowseDataDirectoryButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { Tag: SettingField field })
+            {
+                return;
+            }
+
+            if (TryBrowseDataDirectory(field, out var selectedPath))
+            {
+                field.Value = selectedPath;
+            }
+        }
+
+        private static bool TryBrowseDataDirectory(SettingField field, out string selectedPath)
+        {
+            selectedPath = string.Empty;
+
+            var initialPath = AppPaths.DataDirectory;
+            if (!string.IsNullOrWhiteSpace(field.Value) && AppPaths.TryNormalizeDataDirectory(field.Value, out var normalized, out _))
+            {
+                initialPath = normalized;
+            }
+
+            using var dialog = new FolderBrowserDialog
+            {
+                Description = "选择 YASN 数据目录",
+                UseDescriptionForTitle = true,
+                InitialDirectory = Directory.Exists(initialPath) ? initialPath : AppPaths.BaseDirectory
+            };
+
+            if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                selectedPath = dialog.SelectedPath;
+                return true;
+            }
+
+            return false;
         }
 
         private WebDavOptions BuildWebDavOptions(SettingField server, SettingField user, SettingField pass)
