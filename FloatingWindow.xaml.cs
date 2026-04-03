@@ -1,6 +1,8 @@
 ﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -31,6 +33,7 @@ using MessageBox = ModernWpf.MessageBox;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
+using WinFormsClipboard = System.Windows.Forms.Clipboard;
 
 namespace YASN
 {
@@ -104,13 +107,17 @@ namespace YASN
 
         private bool _previewReady;
         private bool _isPreviewInitInProgress;
+        private bool _isPreviewDocumentReady;
+        private bool _isUpdatingEditorModeSelector;
+        private bool _hasPendingPreviewScrollRestore;
         private bool _isChromeExpanded = true;
         private bool _autoCollapseChromeEnabled = NoteWindowUiSettings.DefaultAutoCollapseChrome;
         private string _previewStyleRelativePath = PreviewStyleManager.DefaultStyleRelativePath;
         private EditorDisplayMode _editorDisplayMode = EditorDisplayMode.PreviewOnly;
-        private double _lastAutoSplitBaseWidth = double.NaN;
+        private double _singleModeWidthBeforeSplit = double.NaN;
         private DateTime _lastPreviewRightClickUtc = DateTime.MinValue;
         private DateTime _lastPreviewSurfaceRightClickUtc = DateTime.MinValue;
+        private double _pendingPreviewScrollRatio = -1;
 
         private static FloatingWindow _currentBottomMostWindow;
         private static readonly object _bottomMostLock = new object();
@@ -266,7 +273,7 @@ namespace YASN
                 ? new GridLength(1, GridUnitType.Star)
                 : new GridLength(0);
             UpdatePreviewContainerAppearance(mode);
-            UpdateEditorModeButton();
+            UpdateEditorModeSelector();
 
             if (adjustWindowWidth &&
                 mode == EditorDisplayMode.TextAndPreview &&
@@ -345,8 +352,7 @@ namespace YASN
             }
             else if (mode == EditorDisplayMode.PreviewOnly)
             {
-                // Slightly overdraw vertically in preview mode to avoid revealing underlying windows during chrome collapse.
-                PreviewContainer.Margin = new Thickness(0, 0, 0, -40);
+                PreviewContainer.Margin = new Thickness(0);
                 PreviewContainer.CornerRadius = new CornerRadius(8);
                 PreviewContainer.BorderThickness = new Thickness(0);
                 PreviewContainer.BorderBrush = Brushes.Transparent;
@@ -439,6 +445,169 @@ namespace YASN
             SchedulePreviewRender();
         }
 
+        private void ContentTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var isPasteShortcut = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.V;
+            if (!isPasteShortcut)
+            {
+                return;
+            }
+
+            if (!TryPasteClipboardAssets())
+            {
+                return;
+            }
+
+            e.Handled = true;
+        }
+
+        private bool TryPasteClipboardAssets()
+        {
+            try
+            {
+                if (WinFormsClipboard.ContainsImage())
+                {
+                    using var clipboardImage = WinFormsClipboard.GetImage();
+                    if (clipboardImage != null)
+                    {
+                        InsertClipboardImage(clipboardImage);
+                        return true;
+                    }
+                }
+
+                if (System.Windows.Clipboard.ContainsImage())
+                {
+                    var clipboardImage = System.Windows.Clipboard.GetImage();
+                    if (clipboardImage != null)
+                    {
+                        InsertClipboardImage(clipboardImage);
+                        return true;
+                    }
+                }
+
+                if (!System.Windows.Clipboard.ContainsFileDropList())
+                {
+                    return false;
+                }
+
+                var files = System.Windows.Clipboard.GetFileDropList();
+                if (files.Count == 0)
+                {
+                    return false;
+                }
+
+                var insertedAny = false;
+                foreach (var path in files.Cast<string>())
+                {
+                    if (!File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    if (IsImageFile(path))
+                    {
+                        InsertImage(path);
+                    }
+                    else
+                    {
+                        InsertAttachment(path);
+                    }
+
+                    insertedAny = true;
+                }
+
+                return insertedAny;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Warn($"Failed to paste clipboard content: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void InsertClipboardImage(System.Drawing.Image image)
+        {
+            string? destPath = null;
+            try
+            {
+                var fileName = $"{Guid.NewGuid()}.png";
+                destPath = Path.GetFullPath(Path.Combine(_imageDirectory, fileName));
+
+                var targetDirectory = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+
+                using var bitmap = new System.Drawing.Bitmap(image);
+                using (var stream = File.Create(destPath))
+                {
+                    bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+                }
+
+                var markdown = $"![clipboard-image](note-assets/{NoteData.Id}/{fileName}){Environment.NewLine}";
+                InsertTextAtCaret(markdown);
+            }
+            catch (Exception ex)
+            {
+                if (!string.IsNullOrEmpty(destPath) && File.Exists(destPath))
+                {
+                    try
+                    {
+                        File.Delete(destPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                MessageBox.Show($"Fail to paste image: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void InsertClipboardImage(BitmapSource imageSource)
+        {
+            string? destPath = null;
+            try
+            {
+                var fileName = $"{Guid.NewGuid()}.png";
+                destPath = Path.GetFullPath(Path.Combine(_imageDirectory, fileName));
+
+                var targetDirectory = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(imageSource));
+                using (var stream = File.Create(destPath))
+                {
+                    encoder.Save(stream);
+                }
+
+                var markdown = $"![clipboard-image](note-assets/{NoteData.Id}/{fileName}){Environment.NewLine}";
+                InsertTextAtCaret(markdown);
+            }
+            catch (Exception ex)
+            {
+                if (!string.IsNullOrEmpty(destPath) && File.Exists(destPath))
+                {
+                    try
+                    {
+                        File.Delete(destPath);
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                MessageBox.Show($"Fail to paste image: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void SchedulePreviewRender()
         {
             _previewDebounceTimer.Stop();
@@ -464,6 +633,7 @@ namespace YASN
                 PreviewWebView.CoreWebView2.ContextMenuRequested += PreviewCoreWebView2_ContextMenuRequested;
                 PreviewWebView.CoreWebView2.NavigationStarting += PreviewCoreWebView2_NavigationStarting;
                 PreviewWebView.CoreWebView2.WebMessageReceived += PreviewCoreWebView2_WebMessageReceived;
+                PreviewWebView.NavigationCompleted += PreviewWebView_NavigationCompleted;
                 PreviewWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     "yasn.local",
                     AppPaths.DataDirectory,
@@ -492,11 +662,27 @@ namespace YASN
 
             try
             {
+                var shouldTrackEditorCaret = ContentTextBox.Visibility == Visibility.Visible &&
+                                             ContentTextBox.IsKeyboardFocusWithin;
+                var scrollRatio = shouldTrackEditorCaret
+                    ? GetEditorCaretScrollRatio()
+                    : await CapturePreviewScrollRatioAsync();
+                _hasPendingPreviewScrollRestore = scrollRatio >= 0;
+                _pendingPreviewScrollRatio = scrollRatio;
+
                 var markdown = GetContent();
                 var htmlBody = global::Markdig.Markdown.ToHtml(markdown ?? string.Empty, _markdownPipeline);
                 var stylePath = PreviewStyleManager.ToStyleAbsolutePath(_previewStyleRelativePath);
                 var styleVersion = File.Exists(stylePath) ? File.GetLastWriteTimeUtc(stylePath).Ticks : DateTime.UtcNow.Ticks;
                 var styleHref = PreviewStyleManager.BuildStyleHref(_previewStyleRelativePath, styleVersion);
+
+                if (_isPreviewDocumentReady)
+                {
+                    await UpdatePreviewDocumentAsync(htmlBody, NoteData.IsDarkMode, styleHref, scrollRatio);
+                    _hasPendingPreviewScrollRestore = false;
+                    return;
+                }
+
                 var html = BuildHtmlPage(htmlBody, NoteData.IsDarkMode, styleHref);
 
                 var cacheDir = Path.GetDirectoryName(_htmlCachePath);
@@ -506,14 +692,127 @@ namespace YASN
                 }
 
                 File.WriteAllText(_htmlCachePath, html);
+                PreviewContainer.Opacity = 0;
                 PreviewWebView.NavigateToString(html);
             }
             catch (Exception ex)
             {
+                PreviewContainer.Opacity = 1;
                 AppLogger.Warn($"Failed to render markdown preview: {ex.Message}");
             }
 
             await Task.CompletedTask;
+        }
+
+        private async Task UpdatePreviewDocumentAsync(string htmlBody, bool darkMode, string styleHref, double scrollRatio)
+        {
+            if (PreviewWebView.CoreWebView2 == null)
+            {
+                return;
+            }
+
+            var themeClass = darkMode ? "theme-dark" : "theme-light";
+            var htmlJson = JsonSerializer.Serialize(htmlBody ?? string.Empty);
+            var themeJson = JsonSerializer.Serialize(themeClass);
+            var styleJson = JsonSerializer.Serialize(styleHref);
+            var ratioLiteral = scrollRatio.ToString("0.########", CultureInfo.InvariantCulture);
+
+            var script = $"(() => {{ const html = {htmlJson}; const theme = {themeJson}; const styleHref = {styleJson}; const ratio = {ratioLiteral}; const stickToBottom = ratio >= 0.999; const root = document.scrollingElement || document.documentElement || document.body; const page = document.getElementById('page'); if (!root || !page) return; page.innerHTML = html; document.body.className = theme; const style = document.getElementById('yasn-style'); if (style) style.setAttribute('href', styleHref); const apply = () => {{ const max = Math.max(0, root.scrollHeight - root.clientHeight); const target = stickToBottom ? max : Math.max(0, Math.min(1, ratio)) * max; if (typeof root.scrollTo === 'function') {{ root.scrollTo({{ top: target, behavior: stickToBottom ? 'auto' : 'smooth' }}); }} else {{ root.scrollTop = target; }} }}; apply(); requestAnimationFrame(apply); setTimeout(apply, 80); }})();";
+            await PreviewWebView.ExecuteScriptAsync(script);
+        }
+
+        private double GetEditorCaretScrollRatio()
+        {
+            try
+            {
+                var textLength = ContentTextBox.Text?.Length ?? 0;
+                if (textLength <= 0)
+                {
+                    return 0;
+                }
+
+                var lineCount = Math.Max(1, ContentTextBox.LineCount);
+                if (lineCount <= 1)
+                {
+                    return 0;
+                }
+
+                var caretLine = ContentTextBox.GetLineIndexFromCharacterIndex(ContentTextBox.CaretIndex);
+                var lastLine = lineCount - 1;
+
+                // When editing at document end (new appended lines), force preview to follow to bottom.
+                if (ContentTextBox.CaretIndex >= textLength - 1 || caretLine >= lastLine - 1)
+                {
+                    return 1;
+                }
+
+                var ratio = caretLine / (double)(lineCount - 1);
+                return Math.Clamp(ratio, 0, 1);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private async Task<double> CapturePreviewScrollRatioAsync()
+        {
+            if (!_previewReady || PreviewWebView.CoreWebView2 == null)
+            {
+                return -1;
+            }
+
+            try
+            {
+                var script = "(() => { const root = document.scrollingElement || document.documentElement || document.body; if (!root) return -1; const max = Math.max(0, root.scrollHeight - root.clientHeight); if (max <= 0) return 0; const top = root.scrollTop || window.scrollY || 0; return top / max; })();";
+                var raw = await PreviewWebView.ExecuteScriptAsync(script);
+                if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var ratio))
+                {
+                    return -1;
+                }
+
+                return Math.Clamp(ratio, 0, 1);
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        private async void PreviewWebView_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            if (!e.IsSuccess || !_hasPendingPreviewScrollRestore || PreviewWebView.CoreWebView2 == null)
+            {
+                if (e.IsSuccess)
+                {
+                    _isPreviewDocumentReady = true;
+                }
+                PreviewContainer.Opacity = 1;
+                return;
+            }
+
+            _isPreviewDocumentReady = true;
+
+            _hasPendingPreviewScrollRestore = false;
+            if (_pendingPreviewScrollRatio < 0)
+            {
+                return;
+            }
+
+            try
+            {
+                var ratioLiteral = _pendingPreviewScrollRatio.ToString("0.########", CultureInfo.InvariantCulture);
+                var script = $"(() => {{ const ratio = {ratioLiteral}; const stickToBottom = ratio >= 0.999; const root = document.scrollingElement || document.documentElement || document.body; if (!root) return; const apply = () => {{ const max = Math.max(0, root.scrollHeight - root.clientHeight); const target = stickToBottom ? max : max * Math.max(0, Math.min(1, ratio)); if (typeof root.scrollTo === 'function') {{ root.scrollTo({{ top: target, behavior: stickToBottom ? 'auto' : 'smooth' }}); }} else {{ root.scrollTop = target; }} }}; apply(); requestAnimationFrame(apply); setTimeout(apply, 80); }})();";
+                await PreviewWebView.ExecuteScriptAsync(script);
+            }
+            catch
+            {
+                // ignore restore failures
+            }
+            finally
+            {
+                PreviewContainer.Opacity = 1;
+            }
         }
 
         private static string BuildHtmlPage(string htmlBody, bool darkMode, string styleHref)
@@ -526,7 +825,7 @@ namespace YASN
 <meta charset='utf-8' />
 <meta http-equiv='Content-Security-Policy' content=""default-src 'self' https://yasn.local data:; img-src 'self' https://yasn.local data: file:; style-src 'self' 'unsafe-inline';"" />
 <base href='https://yasn.local/' />
-<link rel='stylesheet' href='{styleHref}' />
+<link id='yasn-style' rel='stylesheet' href='{styleHref}' />
 </head>
 <body class='{themeClass}'>
 <div id='page'>
@@ -991,10 +1290,22 @@ namespace YASN
             WindowState = WindowState.Minimized;
         }
 
-        private void EditorModeButton_Click(object sender, RoutedEventArgs e)
+        private void EditorModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            var nextMode = GetNextEditorDisplayMode(_editorDisplayMode);
-            SetDisplayMode(nextMode, focusEditor: nextMode != EditorDisplayMode.PreviewOnly);
+            if (_isUpdatingEditorModeSelector ||
+                EditorModeComboBox?.SelectedItem is not ComboBoxItem { Tag: string selectedTag })
+            {
+                return;
+            }
+
+            var selectedMode = selectedTag switch
+            {
+                "TextOnly" => EditorDisplayMode.TextOnly,
+                "TextAndPreview" => EditorDisplayMode.TextAndPreview,
+                _ => EditorDisplayMode.PreviewOnly
+            };
+
+            SetDisplayMode(selectedMode, focusEditor: selectedMode != EditorDisplayMode.PreviewOnly);
         }
 
         private void MoreOptions_Click(object sender, RoutedEventArgs e)
@@ -1181,49 +1492,38 @@ namespace YASN
                 : Visibility.Collapsed;
         }
 
-        private static EditorDisplayMode GetNextEditorDisplayMode(EditorDisplayMode currentMode)
+        private void UpdateEditorModeSelector()
         {
-            return currentMode switch
-            {
-                EditorDisplayMode.TextOnly => EditorDisplayMode.TextAndPreview,
-                EditorDisplayMode.TextAndPreview => EditorDisplayMode.PreviewOnly,
-                _ => EditorDisplayMode.TextOnly
-            };
-        }
-
-        private void UpdateEditorModeButton()
-        {
-            if (EditorModeButton == null)
+            if (EditorModeComboBox == null)
             {
                 return;
             }
 
-            var nextMode = GetNextEditorDisplayMode(_editorDisplayMode);
-            switch (_editorDisplayMode)
+            var selectedTag = _editorDisplayMode switch
             {
-                case EditorDisplayMode.TextOnly:
-                    EditorModeButton.Content = IconModeTextOnly;
-                    EditorModeButton.ToolTip = $"Mode: Text only (Next: {GetEditorModeLabel(nextMode)})";
-                    break;
-                case EditorDisplayMode.TextAndPreview:
-                    EditorModeButton.Content = IconModeTextAndPreview;
-                    EditorModeButton.ToolTip = $"Mode: Text + Preview (Next: {GetEditorModeLabel(nextMode)})";
-                    break;
-                default:
-                    EditorModeButton.Content = IconModePreviewOnly;
-                    EditorModeButton.ToolTip = $"Mode: Preview only (Next: {GetEditorModeLabel(nextMode)})";
-                    break;
-            }
-        }
-
-        private static string GetEditorModeLabel(EditorDisplayMode mode)
-        {
-            return mode switch
-            {
-                EditorDisplayMode.TextOnly => "Text only",
-                EditorDisplayMode.TextAndPreview => "Text + Preview",
-                _ => "Preview only"
+                EditorDisplayMode.TextOnly => "TextOnly",
+                EditorDisplayMode.TextAndPreview => "TextAndPreview",
+                _ => "PreviewOnly"
             };
+
+            _isUpdatingEditorModeSelector = true;
+            try
+            {
+                foreach (var item in EditorModeComboBox.Items.OfType<ComboBoxItem>())
+                {
+                    if (!string.Equals(item.Tag as string, selectedTag, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    EditorModeComboBox.SelectedItem = item;
+                    break;
+                }
+            }
+            finally
+            {
+                _isUpdatingEditorModeSelector = false;
+            }
         }
 
         private void ExpandWindowWidthForSplitMode()
@@ -1233,42 +1533,37 @@ namespace YASN
                 return;
             }
 
-            const double tolerance = 1;
-            var currentWidth = Width;
-            var baseWidth = currentWidth;
-            if (!double.IsNaN(_lastAutoSplitBaseWidth) &&
-                Math.Abs(currentWidth - (_lastAutoSplitBaseWidth * 2)) <= tolerance)
+            if (double.IsNaN(_singleModeWidthBeforeSplit))
             {
-                baseWidth = _lastAutoSplitBaseWidth;
+                _singleModeWidthBeforeSplit = Width;
             }
 
             var minWidth = MinWidth > 0 ? MinWidth : 320;
-            var targetWidth = Math.Max(minWidth, baseWidth * 2);
+            var targetWidth = Math.Max(minWidth, _singleModeWidthBeforeSplit * 2);
             var maxWidth = Math.Max(minWidth, SystemParameters.WorkArea.Width - 20);
             var finalWidth = Math.Min(targetWidth, maxWidth);
-            if (finalWidth <= currentWidth + tolerance)
+            if (Math.Abs(finalWidth - Width) <= 1)
             {
                 return;
             }
 
+            var currentWidth = Width;
             Width = finalWidth;
-            _lastAutoSplitBaseWidth = baseWidth;
             AppLogger.Debug($"Auto expand width for split mode: {currentWidth:F0} -> {finalWidth:F0}");
         }
 
         private void RestoreWindowWidthAfterSplitMode()
         {
-            if (WindowState != WindowState.Normal || double.IsNaN(_lastAutoSplitBaseWidth))
+            if (WindowState != WindowState.Normal || double.IsNaN(_singleModeWidthBeforeSplit))
             {
                 return;
             }
 
-            const double tolerance = 1;
             var minWidth = MinWidth > 0 ? MinWidth : 320;
-            var restoreWidth = Math.Max(minWidth, _lastAutoSplitBaseWidth);
+            var restoreWidth = Math.Max(minWidth, _singleModeWidthBeforeSplit);
             var currentWidth = Width;
-            _lastAutoSplitBaseWidth = double.NaN;
-            if (currentWidth <= restoreWidth + tolerance)
+            _singleModeWidthBeforeSplit = double.NaN;
+            if (Math.Abs(currentWidth - restoreWidth) <= 1)
             {
                 return;
             }
