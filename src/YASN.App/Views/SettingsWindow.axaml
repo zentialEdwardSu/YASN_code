@@ -1,0 +1,236 @@
+﻿<Window
+    x:Class="YASN.SettingsWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="设置"
+    Width="1080"
+    Height="760"
+    MinWidth="900"
+    MinHeight="620">
+  <Window.Styles>
+    <Style Selector="Button.bookmark-nav">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Button.bookmark-nav:pointerover">
+      <Setter Property="Background" Value="#F5F8FC" />
+    </Style>
+
+    <Style Selector="Button.bookmark-nav.active">
+      <Setter Property="Background" Value="#EAF2FB" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <Grid Margin="18" ColumnDefinitions="240,*" ColumnSpacing="18">
+    <Border
+        Padding="18"
+        Background="{StaticResource SurfaceBrush}"
+        BorderBrush="#D9E0E8"
+        BorderThickness="0,0,1,0">
+      <StackPanel Spacing="10">
+        <StackPanel Margin="0,0,0,10" Spacing="4">
+          <TextBlock FontSize="24" FontWeight="SemiBold" Text="设置" />
+          <TextBlock
+              Foreground="{StaticResource TextSecondaryBrush}"
+              Text="大部分配置会自动保存，左侧书签用于快速定位。"
+              TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Button
+            x:Name="GeneralNavButton"
+            Classes="bookmark-nav active"
+            Click="NavigateGeneral_OnClick">
+          <StackPanel Spacing="3">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Text="通用" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Text="启动、任务栏、浮窗行为" TextWrapping="Wrap" />
+          </StackPanel>
+        </Button>
+
+        <Button
+            x:Name="StorageNavButton"
+            Classes="bookmark-nav"
+            Click="NavigateStorage_OnClick">
+          <StackPanel Spacing="3">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Text="存储" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Text="日志、数据目录、导入导出" TextWrapping="Wrap" />
+          </StackPanel>
+        </Button>
+
+        <Button
+            x:Name="EditorNavButton"
+            Classes="bookmark-nav"
+            Click="NavigateEditor_OnClick">
+          <StackPanel Spacing="3">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Text="编辑器" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Text="默认编辑模式与预览行为" TextWrapping="Wrap" />
+          </StackPanel>
+        </Button>
+
+        <Button
+            x:Name="SyncNavButton"
+            Classes="bookmark-nav"
+            Click="NavigateSync_OnClick">
+          <StackPanel Spacing="3">
+            <TextBlock FontSize="14" FontWeight="SemiBold" Text="同步" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Text="WebDAV 连接、自动同步与附件策略" TextWrapping="Wrap" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="14">
+      <Border
+          Padding="0,0,0,18"
+          BorderBrush="#D9E0E8"
+          BorderThickness="0,0,0,1">
+        <StackPanel Spacing="4">
+          <TextBlock FontSize="26" FontWeight="SemiBold" Text="偏好与同步" />
+          <TextBlock
+              Foreground="{StaticResource TextSecondaryBrush}"
+              Text="自动保存用于普通设置项；执行型操作仍然保留独立按钮。"
+              TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <ScrollViewer x:Name="SettingsScrollViewer" Grid.Row="1">
+        <StackPanel Margin="0,0,6,0" Spacing="18">
+          <Border x:Name="GeneralSection" Padding="0,0,0,18" Classes="surface-card">
+            <StackPanel Spacing="14">
+              <StackPanel Spacing="6">
+                <TextBlock FontSize="22" FontWeight="SemiBold" Text="通用" />
+                <TextBlock
+                    Foreground="{StaticResource TextSecondaryBrush}"
+                    Text="控制应用启动方式、标题栏自动收缩和便签在任务栏中的显示策略。"
+                    TextWrapping="Wrap" />
+              </StackPanel>
+
+              <TextBlock FontSize="18" FontWeight="SemiBold" Text="启动与窗口" />
+              <CheckBox
+                  x:Name="AutoStartCheckBox"
+                  Content="开机自动启动"
+                  Checked="AutoStart_OnChanged"
+                  Unchecked="AutoStart_OnChanged" />
+              <CheckBox
+                  x:Name="AutoCollapseChromeCheckBox"
+                  Content="鼠标移出时自动收起标题栏和工具栏"
+                  Checked="AutoCollapseChrome_OnChanged"
+                  Unchecked="AutoCollapseChrome_OnChanged" />
+              <TextBlock Text="便签任务栏显示策略" />
+              <ComboBox
+                  x:Name="TaskbarVisibilityComboBox"
+                  SelectionChanged="TaskbarVisibility_OnSelectionChanged" />
+            </StackPanel>
+          </Border>
+
+          <Border x:Name="StorageSection" Padding="0,0,0,18" Classes="surface-card">
+            <StackPanel Spacing="14">
+              <StackPanel Spacing="6">
+                <TextBlock FontSize="22" FontWeight="SemiBold" Text="存储" />
+                <TextBlock
+                    Foreground="{StaticResource TextSecondaryBrush}"
+                    Text="管理日志上限、存储根目录，以及配置的导入导出。"
+                    TextWrapping="Wrap" />
+              </StackPanel>
+
+              <TextBlock FontSize="18" FontWeight="SemiBold" Text="本地数据" />
+              <TextBlock Text="日志大小上限（KB）" />
+              <TextBox
+                  x:Name="LogSizeTextBox"
+                  LostFocus="LogSize_OnLostFocus" />
+              <TextBlock Text="存储根目录（实际数据保存在所选目录下的 data）" />
+              <TextBox x:Name="DataDirectoryTextBox" />
+              <WrapPanel Orientation="Horizontal">
+                <Button Classes="subtle" Margin="0,0,8,8" Content="浏览目录" Click="BrowseDataDirectory_OnClick" />
+                <Button Classes="subtle" Margin="0,0,8,8" Content="应用根目录" Click="ApplyDataDirectory_OnClick" />
+                <Button Classes="subtle" Margin="0,0,8,8" Content="导出设置" Click="ExportSettings_OnClick" />
+                <Button Classes="subtle" Content="导入设置" Click="ImportSettings_OnClick" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+
+          <Border x:Name="EditorSection" Padding="0,0,0,18" Classes="surface-card">
+            <StackPanel Spacing="14">
+              <StackPanel Spacing="6">
+                <TextBlock FontSize="22" FontWeight="SemiBold" Text="编辑器" />
+                <TextBlock
+                    Foreground="{StaticResource TextSecondaryBrush}"
+                    Text="设置便签进入编辑时的默认视图模式。"
+                    TextWrapping="Wrap" />
+              </StackPanel>
+
+              <TextBlock FontSize="18" FontWeight="SemiBold" Text="默认模式" />
+              <TextBlock Text="进入编辑时的默认模式" />
+              <ComboBox
+                  x:Name="EditorModeComboBox"
+                  SelectionChanged="EditorMode_OnSelectionChanged" />
+            </StackPanel>
+          </Border>
+
+          <Border x:Name="SyncSection" Padding="0,0,0,18" Classes="surface-card">
+            <StackPanel Spacing="14">
+              <StackPanel Spacing="6">
+                <TextBlock FontSize="22" FontWeight="SemiBold" Text="同步" />
+                <TextBlock
+                    Foreground="{StaticResource TextSecondaryBrush}"
+                    Text="编辑 WebDAV 字段时会自动保存草稿；应用到同步服务和测试连接仍然是手动操作。"
+                    TextWrapping="Wrap" />
+              </StackPanel>
+
+              <TextBlock FontSize="18" FontWeight="SemiBold" Text="WebDAV 连接" />
+              <TextBlock Text="服务器地址" />
+              <TextBox
+                  x:Name="WebDavServerUrlTextBox"
+                  LostFocus="WebDavField_OnLostFocus" />
+              <TextBlock Text="用户名" />
+              <TextBox
+                  x:Name="WebDavUserTextBox"
+                  LostFocus="WebDavField_OnLostFocus" />
+              <TextBlock Text="密码 / Token" />
+              <TextBox
+                  x:Name="WebDavPasswordTextBox"
+                  PasswordChar="*"
+                  LostFocus="WebDavField_OnLostFocus" />
+              <TextBlock Text="远程目录" />
+              <TextBox
+                  x:Name="WebDavRemoteTextBox"
+                  LostFocus="WebDavField_OnLostFocus" />
+
+              <Border Height="1" Background="#D9E0E8" />
+
+              <TextBlock FontSize="18" FontWeight="SemiBold" Text="同步策略" />
+              <TextBlock Text="同步间隔（秒）" />
+              <TextBox
+                  x:Name="SyncIntervalTextBox"
+                  LostFocus="WebDavField_OnLostFocus" />
+              <CheckBox
+                  x:Name="AutoSyncCheckBox"
+                  Content="启用自动同步"
+                  Checked="WebDavToggle_OnChanged"
+                  Unchecked="WebDavToggle_OnChanged" />
+              <CheckBox
+                  x:Name="AttachmentAutoSyncCheckBox"
+                  Content="自动同步附件"
+                  Checked="WebDavToggle_OnChanged"
+                  Unchecked="WebDavToggle_OnChanged" />
+              <TextBlock Text="附件自动同步阈值（MB）" />
+              <TextBox
+                  x:Name="AttachmentThresholdTextBox"
+                  LostFocus="WebDavField_OnLostFocus" />
+              <WrapPanel Orientation="Horizontal">
+                <Button Classes="subtle" Margin="0,0,8,8" Content="测试连接" Click="TestWebDav_OnClick" />
+                <Button Classes="accent" Content="应用同步设置" Click="SaveWebDav_OnClick" />
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</Window>

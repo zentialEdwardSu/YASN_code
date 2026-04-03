@@ -1,0 +1,139 @@
+<Window
+    x:Class="YASN.MainWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:YASN"
+    Title="YASN"
+    Width="1180"
+    Height="760"
+    MinWidth="920"
+    MinHeight="620">
+  <Grid RowDefinitions="Auto,*">
+    <Border
+        Margin="18,18,18,0"
+        Padding="20"
+        Classes="surface-card">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="6">
+          <TextBlock FontSize="28" FontWeight="SemiBold" Text="YASN" />
+          <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="便签管理器，采用更扁平的 Fluent 风格重建界面与交互。" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+          <Border Padding="16,10" Background="#EAF2FB" BorderBrush="{StaticResource AccentBrush}" BorderThickness="4,0,0,0">
+            <StackPanel>
+              <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="便签总数" />
+              <TextBlock x:Name="TotalNotesTextBlock" FontSize="24" FontWeight="SemiBold" Text="0" />
+            </StackPanel>
+          </Border>
+
+          <Border Padding="16,10" Background="#ECF7ED" BorderBrush="#246B2A" BorderThickness="4,0,0,0">
+            <StackPanel>
+              <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="当前打开" />
+              <TextBlock x:Name="OpenNotesTextBlock" FontSize="24" FontWeight="SemiBold" Text="0" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1" Margin="18" ColumnDefinitions="2.9*,1.25*" ColumnSpacing="18">
+      <Border Padding="18" Classes="surface-card">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+            <StackPanel Spacing="4">
+              <TextBlock FontSize="22" FontWeight="SemiBold" Text="全部便签" />
+              <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="编辑标题、调整层级，并快速打开或关闭便签窗口。" />
+            </StackPanel>
+
+            <Button Grid.Column="1" Classes="subtle" Content="刷新列表" Click="RefreshList_OnClick" />
+          </Grid>
+
+          <ScrollViewer Grid.Row="1">
+            <StackPanel Spacing="14">
+              <Border
+                  x:Name="NoNotesPanel"
+                  Padding="26"
+                  Classes="subtle-card"
+                  IsVisible="False">
+                <StackPanel Spacing="10">
+                  <TextBlock FontSize="18" FontWeight="SemiBold" Text="还没有便签" />
+                  <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="先创建一张普通便签，或直接使用右侧的快捷操作创建置顶、置底窗口。" TextWrapping="Wrap" />
+                  <Button HorizontalAlignment="Left" Classes="accent" Content="创建第一张便签" Click="CreateNormalNote_OnClick" />
+                </StackPanel>
+              </Border>
+
+              <ItemsControl x:Name="NotesItemsControl">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:NoteData">
+                    <Border Padding="16" Classes="subtle-card">
+                      <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto" RowSpacing="12" ColumnSpacing="12">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="10">
+                          <TextBox
+                              Watermark="输入便签标题"
+                              Text="{Binding Title}"
+                              Tag="{Binding}"
+                              LostFocus="TitleEditor_OnLostFocus" />
+
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Border Padding="10,4" Margin="0,0,8,0" Background="#EAF2FB" BorderBrush="{StaticResource AccentBrush}" BorderThickness="2,0,0,0">
+                              <TextBlock Foreground="{StaticResource AccentBrush}" Text="{Binding Level}" />
+                            </Border>
+                            <Border Padding="10,4" Background="#ECF7ED" BorderBrush="#246B2A" BorderThickness="2,0,0,0">
+                              <TextBlock Foreground="#246B2A" Text="{Binding StatusText}" />
+                            </Border>
+                          </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                          <Button Classes="accent compact" Content="打开" Tag="{Binding}" Click="OpenNote_OnClick" />
+                          <Button Classes="subtle compact" Content="关闭" Tag="{Binding}" Click="CloseNote_OnClick" />
+                          <Button Classes="danger compact" Content="删除" Tag="{Binding}" Click="DeleteNote_OnClick" />
+                        </StackPanel>
+
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2"
+                            Foreground="{StaticResource TextSecondaryBrush}"
+                            Text="{Binding DisplayTitle}" />
+
+                        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                          <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="窗口层级" />
+                          <Button Classes="subtle compact" Content="普通" Tag="{Binding}" Click="SetNormalLevel_OnClick" />
+                          <Button Classes="subtle compact" Content="置顶" Tag="{Binding}" Click="SetTopMostLevel_OnClick" />
+                          <Button Classes="subtle compact" Content="置底" Tag="{Binding}" Click="SetBottomMostLevel_OnClick" />
+                        </StackPanel>
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+
+      <StackPanel Grid.Column="1" Spacing="18">
+        <Border Padding="18" Classes="surface-card">
+          <StackPanel Spacing="12">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="新建便签" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="保留旧版三种窗口层级，并用更扁平的 Fluent 风格呈现。" TextWrapping="Wrap" />
+            <Button Classes="accent" Content="新建普通便签" Click="CreateNormalNote_OnClick" />
+            <Button Classes="subtle" Content="新建置顶便签" Click="CreateTopMostNote_OnClick" />
+            <Button Classes="subtle" Content="新建置底便签" Click="CreateBottomMostNote_OnClick" />
+          </StackPanel>
+        </Border>
+
+        <Border Padding="18" Classes="surface-card">
+          <StackPanel Spacing="12">
+            <TextBlock FontSize="20" FontWeight="SemiBold" Text="系统操作" />
+            <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="设置、数据目录与托盘行为都保留在 Avalonia 入口中。" TextWrapping="Wrap" />
+            <Button Classes="subtle" Content="打开设置" Click="OpenSettings_OnClick" />
+            <Button Classes="subtle" Content="打开数据目录" Click="OpenDataFolder_OnClick" />
+            <Button Classes="subtle" Content="隐藏到托盘" Click="HideToTray_OnClick" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

@@ -1,0 +1,138 @@
+<Application
+    x:Class="YASN.App"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F3F4F6" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="SurfaceMutedBrush" Color="#F8FAFC" />
+    <SolidColorBrush x:Key="SurfaceBorderBrush" Color="#D9E0E8" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#0F6CBD" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#5B6472" />
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://IconPacks.Avalonia/Icons.axaml" />
+
+    <Style Selector="Window">
+      <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="Border.surface-card">
+      <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SurfaceBorderBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Border.subtle-card">
+      <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SurfaceBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Button">
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="14,8" />
+    </Style>
+
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.subtle">
+      <Setter Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SurfaceBorderBrush}" />
+    </Style>
+
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="#C42B1C" />
+      <Setter Property="Foreground" Value="White" />
+      <Setter Property="BorderBrush" Value="#C42B1C" />
+    </Style>
+
+    <Style Selector="Button.compact">
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="10,6" />
+    </Style>
+
+    <Style Selector="Button.icon-chrome">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="#31404D" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Button.icon-chrome:pointerover">
+      <Setter Property="Background" Value="#22000000" />
+    </Style>
+
+    <Style Selector="Button.icon-chrome:pressed">
+      <Setter Property="Background" Value="#33000000" />
+    </Style>
+
+    <Style Selector="Button.icon-toolbar">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="#31404D" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+
+    <Style Selector="Button.icon-toolbar:pointerover">
+      <Setter Property="Background" Value="#140F172A" />
+    </Style>
+
+    <Style Selector="Button.icon-toolbar:pressed">
+      <Setter Property="Background" Value="#220F172A" />
+    </Style>
+
+    <Style Selector="TextBox">
+      <Setter Property="MinHeight" Value="36" />
+    </Style>
+
+    <Style Selector="ComboBox">
+      <Setter Property="MinHeight" Value="36" />
+    </Style>
+
+    <Style Selector="TabItem">
+      <Setter Property="Padding" Value="14,10" />
+    </Style>
+  </Application.Styles>
+
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon
+          Icon="/Assets/Resources/amy.ico"
+          ToolTipText="YASN">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="新建普通便签" Click="CreateNormalNote_OnClick" />
+            <NativeMenuItem Header="新建置顶便签" Click="CreateTopMostNote_OnClick" />
+            <NativeMenuItem Header="新建置底便签" Click="CreateBottomMostNote_OnClick" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="显示主窗口" Click="ShowMainWindow_OnClick" />
+            <NativeMenuItem Header="设置" Click="OpenSettings_OnClick" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="退出" Click="ExitApplication_OnClick" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
+</Application>

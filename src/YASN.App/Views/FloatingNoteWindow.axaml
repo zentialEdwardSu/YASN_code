@@ -1,0 +1,206 @@
+<Window
+    x:Class="YASN.FloatingNoteWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:material="using:IconPacks.Avalonia.Material"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="便签"
+    Width="760"
+    Height="460"
+    MinWidth="420"
+    MinHeight="260"
+    CanResize="True"
+    ExtendClientAreaChromeHints="NoChrome"
+    ExtendClientAreaToDecorationsHint="True"
+    ExtendClientAreaTitleBarHeightHint="-1"
+    SystemDecorations="None">
+  <Border
+      x:Name="RootBorder"
+      Margin="8"
+      Background="#F8FAFC"
+      BorderBrush="#D8DFE8"
+      BorderThickness="1"
+      CornerRadius="0">
+    <Grid RowDefinitions="Auto,Auto,*">
+      <Border
+          x:Name="HeaderBorder"
+          Height="56"
+          Padding="16,10"
+          Background="#EFF3F8"
+          ClipToBounds="True"
+          CornerRadius="0">
+        <Border.Transitions>
+          <Transitions>
+            <DoubleTransition Property="Height" Duration="0:0:0.18" />
+            <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+          </Transitions>
+        </Border.Transitions>
+        <Border.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="重命名" Click="RenameTitle_OnClick" />
+            <MenuItem Header="选择背景图片" Click="SelectBackground_OnClick" />
+            <MenuItem Header="清空背景图片" Click="ClearBackground_OnClick" />
+            <MenuItem Header="切换标题颜色" Click="ChangeHeaderColor_OnClick" />
+            <Separator />
+            <MenuItem Header="删除便签" Click="DeleteNote_OnClick" />
+          </ContextMenu>
+        </Border.ContextMenu>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <Border
+              x:Name="TitleBarDragRegion"
+              Background="Transparent"
+              PointerPressed="TitleBarDragRegion_OnPointerPressed">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+              <material:PackIconMaterial
+                  x:Name="TitleGlyphIcon"
+                  Width="18"
+                  Height="18"
+                  VerticalAlignment="Center"
+                  Foreground="#5B6472"
+                  Kind="NoteTextOutline" />
+              <TextBlock
+                  x:Name="TitleTextBlock"
+                  Grid.Column="1"
+                  VerticalAlignment="Center"
+                  Foreground="#2E3A46"
+                  FontSize="13"
+                  FontWeight="SemiBold"
+                  TextTrimming="CharacterEllipsis" />
+            </Grid>
+          </Border>
+
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button
+                x:Name="LevelButton"
+                Classes="compact icon-chrome"
+                ToolTip.Tip="切换窗口层级"
+                Click="CycleWindowLevel_OnClick">
+              <material:PackIconMaterial
+                  x:Name="LevelIcon"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Width="16"
+                  Height="16" />
+            </Button>
+            <Button
+                x:Name="ModeButton"
+                Classes="compact icon-chrome"
+                ToolTip.Tip="切换编辑器模式"
+                Click="CycleMode_OnClick">
+              <material:PackIconMaterial
+                  x:Name="ModeIcon"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Width="16"
+                  Height="16" />
+            </Button>
+            <Button
+                x:Name="ThemeButton"
+                Classes="compact icon-chrome"
+                ToolTip.Tip="切换日间/夜间模式"
+                Click="ToggleTheme_OnClick">
+              <material:PackIconMaterial
+                  x:Name="ThemeIcon"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Width="16"
+                  Height="16" />
+            </Button>
+            <Button
+                Classes="compact icon-chrome"
+                ToolTip.Tip="关闭窗口"
+                Click="CloseNote_OnClick">
+              <material:PackIconMaterial
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Width="16"
+                  Height="16"
+                  Kind="Close" />
+            </Button>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Border
+          x:Name="ToolbarBorder"
+          Grid.Row="1"
+          Height="42"
+          Padding="12,6"
+          Background="#F6F8FB"
+          ClipToBounds="True">
+        <Border.Transitions>
+          <Transitions>
+            <DoubleTransition Property="Height" Duration="0:0:0.18" />
+            <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+          </Transitions>
+        </Border.Transitions>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button
+              Classes="compact icon-toolbar"
+              ToolTip.Tip="插入图片"
+              Click="InsertImage_OnClick">
+            <material:PackIconMaterial
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Width="16"
+                Height="16"
+                Kind="ImageOutline" />
+          </Button>
+          <Button
+              Classes="compact icon-toolbar"
+              ToolTip.Tip="插入附件"
+              Click="InsertAttachment_OnClick">
+            <material:PackIconMaterial
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Width="16"
+                Height="16"
+                Kind="Paperclip" />
+          </Button>
+        </StackPanel>
+      </Border>
+
+      <Grid Grid.Row="2">
+        <Image
+            x:Name="BackgroundImage"
+            Stretch="UniformToFill"
+            Opacity="0.15" />
+
+        <Grid x:Name="ContentGrid" ColumnDefinitions="*,6,*">
+          <TextBox
+              x:Name="EditorTextBox"
+              Grid.Column="0"
+              Margin="12"
+              AcceptsReturn="True"
+              Background="#FFFFFFFF"
+              BorderBrush="#D9E0E8"
+              BorderThickness="1"
+              CornerRadius="0"
+              Padding="14,12"
+              ScrollViewer.VerticalScrollBarVisibility="Auto"
+              TextWrapping="Wrap"
+              TextChanged="EditorTextBox_OnTextChanged" />
+
+          <GridSplitter
+              x:Name="EditorPreviewSplitter"
+              Grid.Column="1"
+              Width="6"
+              Background="#E3E8EF"
+              HorizontalAlignment="Stretch" />
+
+          <Border
+              x:Name="PreviewBorder"
+              Grid.Column="2"
+              Margin="12"
+              Padding="12"
+              Background="#FFFFFFFF"
+              BorderBrush="#D9E0E8"
+              BorderThickness="1"
+              CornerRadius="0"
+              DoubleTapped="PreviewBorder_OnDoubleTapped">
+            <ContentControl x:Name="PreviewHost" />
+          </Border>
+        </Grid>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
