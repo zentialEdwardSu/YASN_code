@@ -110,10 +110,9 @@ namespace YASN
         private bool _previewReady;
         private bool _isPreviewInitInProgress;
         private bool _isPreviewDocumentReady;
-        private bool _isUpdatingEditorModeSelector;
         private bool _hasPendingPreviewScrollRestore;
         private bool _isChromeExpanded = true;
-        private bool _autoCollapseChromeEnabled = NoteWindowUiSettings.DefaultAutoCollapseChrome;
+        private bool _autoCollapseChromeEnabled = NoteWindowUiSettings.DefaultValue;
         private string _previewStyleRelativePath = PreviewStyleManager.DefaultStyleRelativePath;
         private EditorDisplayMode _editorDisplayMode = EditorDisplayMode.PreviewOnly;
         private double _singleModeWidthBeforeSplit = double.NaN;
@@ -122,7 +121,7 @@ namespace YASN
         private double _pendingPreviewScrollRatio = -1;
 
         private static FloatingWindow _currentBottomMostWindow;
-        private static readonly object _bottomMostLock = new object();
+        private static readonly Lock _bottomMostLock = new ();
         private static bool _isApplicationShuttingDown;
 
         public NoteData NoteData { get; private set; }
@@ -146,13 +145,13 @@ namespace YASN
             _backgroundImageDirectory = AppPaths.GetNoteBackgroundDirectory(noteData.Id);
             _htmlCachePath = AppPaths.GetNoteHtmlCachePath(noteData.Id);
 
-            if (noteData.Left > 0 && noteData.Top > 0)
+            if (noteData is { Left: > 0, Top: > 0 })
             {
                 Left = noteData.Left;
                 Top = noteData.Top;
             }
 
-            if (noteData.Width > 0 && noteData.Height > 0)
+            if (noteData is { Width: > 0, Height: > 0 })
             {
                 Width = noteData.Width;
                 Height = noteData.Height;
@@ -172,13 +171,13 @@ namespace YASN
 
             _markdownPipeline = MarkdownPipelineConfig.Create();
 
-            _bottomMostTimer = new System.Windows.Threading.DispatcherTimer
+            _bottomMostTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(100)
             };
             _bottomMostTimer.Tick += Timer_Tick;
 
-            _previewDebounceTimer = new System.Windows.Threading.DispatcherTimer
+            _previewDebounceTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(300)
             };
@@ -188,10 +187,10 @@ namespace YASN
                 await RenderPreviewAsync();
             };
 
+            RefreshChromeBehaviorFromSettings();
             _chromeHoverTimer.Interval = TimeSpan.FromMilliseconds(120);
             _chromeHoverTimer.Tick += (_, _) => UpdateChromeBarsByMouseState();
             _chromeHoverTimer.Start();
-            RefreshChromeBehaviorFromSettings();
 
             _collapseEditBar = (Storyboard)FindResource("CollapseEditBar");
             _expandEditBar = (Storyboard)FindResource("ExpandEditBar");
@@ -276,7 +275,7 @@ namespace YASN
                 ? new GridLength(1, GridUnitType.Star)
                 : new GridLength(0);
             UpdatePreviewContainerAppearance(mode);
-            UpdateEditorModeSelector();
+            UpdateEditorModeButton();
 
             if (adjustWindowWidth &&
                 mode == EditorDisplayMode.TextAndPreview &&
@@ -329,6 +328,7 @@ namespace YASN
         {
             var settingsStore = new SettingsStore();
             _autoCollapseChromeEnabled = NoteWindowUiSettings.IsAutoCollapseChromeEnabled(settingsStore);
+            AppLogger.Debug($"Load chrome behavior settings: {_autoCollapseChromeEnabled}");
             UpdateChromeBarsByMouseState();
         }
 
@@ -1411,13 +1411,7 @@ namespace YASN
             }
             else
             {
-                try
-                {
-                    DragMove();
-                }
-                catch
-                {
-                }
+                DragMove();
 
                 if (NoteData.Level == WindowLevel.BottomMost)
                 {
@@ -1436,23 +1430,7 @@ namespace YASN
             WindowState = WindowState.Minimized;
         }
 
-        private void EditorModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_isUpdatingEditorModeSelector ||
-                EditorModeComboBox?.SelectedItem is not ComboBoxItem { Tag: string selectedTag })
-            {
-                return;
-            }
 
-            var selectedMode = selectedTag switch
-            {
-                "TextOnly" => EditorDisplayMode.TextOnly,
-                "TextAndPreview" => EditorDisplayMode.TextAndPreview,
-                _ => EditorDisplayMode.PreviewOnly
-            };
-
-            SetDisplayMode(selectedMode, focusEditor: selectedMode != EditorDisplayMode.PreviewOnly);
-        }
 
         private void MoreOptions_Click(object sender, RoutedEventArgs e)
         {
@@ -1637,41 +1615,7 @@ namespace YASN
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
-
-        private void UpdateEditorModeSelector()
-        {
-            if (EditorModeComboBox == null)
-            {
-                return;
-            }
-
-            var selectedTag = _editorDisplayMode switch
-            {
-                EditorDisplayMode.TextOnly => "TextOnly",
-                EditorDisplayMode.TextAndPreview => "TextAndPreview",
-                _ => "PreviewOnly"
-            };
-
-            _isUpdatingEditorModeSelector = true;
-            try
-            {
-                foreach (var item in EditorModeComboBox.Items.OfType<ComboBoxItem>())
-                {
-                    if (!string.Equals(item.Tag as string, selectedTag, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    EditorModeComboBox.SelectedItem = item;
-                    break;
-                }
-            }
-            finally
-            {
-                _isUpdatingEditorModeSelector = false;
-            }
-        }
-
+        
         private void ExpandWindowWidthForSplitMode()
         {
             if (WindowState != WindowState.Normal)
@@ -2231,17 +2175,12 @@ namespace YASN
             {
                 foreach (var file in Directory.GetFiles(_backgroundImageDirectory))
                 {
-                    try
-                    {
                         File.Delete(file);
-                    }
-                    catch
-                    {
-                    }
                 }
             }
-            catch
+            catch (Exception ex) 
             {
+                AppLogger.Debug(ex.Message);
             }
         }
 
@@ -2302,6 +2241,64 @@ namespace YASN
         private async void RefreshPreview_Click(object sender, RoutedEventArgs e)
         {
             await RenderPreviewAsync();
+        }
+
+        // For Editor mode switching in title bar
+        EditorDisplayMode GetNextEditorDisplayMode(EditorDisplayMode previousMode)
+        {
+            return previousMode switch
+            {
+                EditorDisplayMode.TextOnly => EditorDisplayMode.TextAndPreview,
+                EditorDisplayMode.TextAndPreview => EditorDisplayMode.PreviewOnly,
+                _ => EditorDisplayMode.TextOnly
+            };
+        }
+        private void EditorModeButton_Click(object sender, RoutedEventArgs e)
+        {
+            var nextMode = GetNextEditorDisplayMode(_editorDisplayMode);
+            SetDisplayMode(nextMode, focusEditor: nextMode != EditorDisplayMode.PreviewOnly);
+        }
+        
+        private static string GetEditorModeLabel(EditorDisplayMode mode)
+        {
+            return mode switch
+            {
+                EditorDisplayMode.TextOnly => "Text only",
+                EditorDisplayMode.TextAndPreview => "Text + Preview",
+                _ => "Preview only"
+            };
+        }
+        
+        private void UpdateEditorModeButton()
+        {
+            // for collapse 
+            if (EditorModeButton == null)
+            {
+                return;
+            }
+
+            var nextMode = GetNextEditorDisplayMode(_editorDisplayMode);
+            switch (_editorDisplayMode)
+            {
+                case EditorDisplayMode.TextOnly:
+                    EditorModeButton.Content = IconModeTextOnly;
+                    EditorModeButton.ToolTip = $"Mode: Text only (Next: {GetEditorModeLabel(nextMode)})";
+                    break;
+                case EditorDisplayMode.TextAndPreview:
+                    EditorModeButton.Content = IconModeTextAndPreview;
+                    EditorModeButton.ToolTip = $"Mode: Text + Preview (Next: {GetEditorModeLabel(nextMode)})";
+                    break;
+                case EditorDisplayMode.PreviewOnly:
+                default:
+                    EditorModeButton.Content = IconModePreviewOnly;
+                    EditorModeButton.ToolTip = $"Mode: Preview only (Next: {GetEditorModeLabel(nextMode)})";
+                    break;
+            }
+        }
+
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        {
+            SetDisplayMode(EditorDisplayMode.PreviewOnly);
         }
     }
 }
