@@ -1,9 +1,10 @@
-﻿using System;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using YASN.Logging;
+using YASN.WindowLayout;
 using MessageBox = ModernWpf.MessageBox;
 
 namespace YASN
@@ -16,7 +17,7 @@ namespace YASN
         public MainWindow()
         {
             InitializeComponent();
-            
+
             // Converters are already defined in MainWindow.xaml, no need to add them here
         }
 
@@ -29,29 +30,29 @@ namespace YASN
         {
             WindowListView.ItemsSource = null;
             WindowListView.ItemsSource = NoteManager.Instance.Notes;
-            
-            NoWindowsText.Visibility = NoteManager.Instance.Notes.Count == 0 
-                ? Visibility.Visible 
+
+            NoWindowsText.Visibility = NoteManager.Instance.Notes.Count == 0
+                ? Visibility.Visible
                 : Visibility.Collapsed;
         }
 
         private void CreateTopWindow_Click(object sender, RoutedEventArgs e)
         {
-            var noteData = NoteManager.Instance.CreateNote(WindowLevel.TopMost);
+            NoteData noteData = NoteManager.Instance.CreateNote(WindowLevel.TopMost);
             OpenNote(noteData);
             RefreshWindowList();
         }
 
         private void CreateBottomWindow_Click(object sender, RoutedEventArgs e)
         {
-            var noteData = NoteManager.Instance.CreateNote(WindowLevel.BottomMost);
+            NoteData noteData = NoteManager.Instance.CreateNote(WindowLevel.BottomMost);
             OpenNote(noteData);
             RefreshWindowList();
         }
 
         private void CreateNormalWindow_Click(object sender, RoutedEventArgs e)
         {
-            var noteData = NoteManager.Instance.CreateNote(WindowLevel.Normal);
+            NoteData noteData = NoteManager.Instance.CreateNote(WindowLevel.Normal);
             OpenNote(noteData);
             RefreshWindowList();
         }
@@ -73,24 +74,20 @@ namespace YASN
 
         private void DeleteNote_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is System.Windows.Controls.Button button && button.Tag is NoteData noteData)
-            {
-                var result = MessageBox.Show(
-                    $"Are you sure you want to delete '{noteData.Title}'?",
-                    "Confirm Delete",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
+            if (sender is not System.Windows.Controls.Button button || button.Tag is not NoteData noteData) return;
+            MessageBoxResult? result = MessageBox.Show(
+                $"Are you sure you want to delete '{noteData.Title}'?",
+                "Confirm Delete",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
 
-                if (result == MessageBoxResult.Yes)
-                {
-                    if (noteData.IsOpen && noteData.Window != null)
-                    {
-                        noteData.Window.Close();
-                    }
-                    NoteManager.Instance.DeleteNote(noteData);
-                    RefreshWindowList();
-                }
+            if (result != MessageBoxResult.Yes) return;
+            if (noteData.IsOpen && noteData.Window != null)
+            {
+                noteData.Window.Close();
             }
+            NoteManager.Instance.DeleteNote(noteData);
+            RefreshWindowList();
         }
 
         private void ChangeNoteLevel_Click(object sender, RoutedEventArgs e)
@@ -130,13 +127,101 @@ namespace YASN
         {
             if (!noteData.IsOpen || noteData.Window == null)
             {
-                var window = new FloatingWindow(noteData);
+                FloatingWindow window = new FloatingWindow(noteData);
                 window.Show();
             }
             else
             {
                 noteData.Window.Activate();
             }
+        }
+
+        private FloatingWindow EnsureNoteWindow(NoteData noteData)
+        {
+            OpenNote(noteData);
+            return noteData.Window!;
+        }
+
+        private static void RestoreDefaultSize(NoteData noteData)
+        {
+            if (noteData == null)
+            {
+                return;
+            }
+
+            noteData.Width = NoteManager.DefaultNoteWidth;
+            noteData.Height = NoteManager.DefaultNoteHeight;
+            NoteManager.Instance.UpdateNote(noteData);
+
+            if (noteData.Window != null)
+            {
+                FloatingWindowQuickActions.RestoreDefaultSize(noteData.Window);
+            }
+        }
+
+        private void QuickMoveNote_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem || menuItem.Tag is not NoteData noteData)
+            {
+                return;
+            }
+
+            FloatingWindowQuickActions.ShowQuickMove(EnsureNoteWindow(noteData));
+        }
+
+        private void QuickMoveAndResizeNote_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem || menuItem.Tag is not NoteData noteData)
+            {
+                return;
+            }
+
+            FloatingWindowQuickActions.ShowQuickMoveAndResize(EnsureNoteWindow(noteData));
+        }
+
+        private void QuickResizeNote_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem || menuItem.Tag is not NoteData noteData)
+            {
+                return;
+            }
+
+            FloatingWindowQuickActions.ShowQuickResize(EnsureNoteWindow(noteData));
+        }
+
+        private void MoveNoteToMouseMonitor_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem || menuItem.Tag is not NoteData noteData)
+            {
+                return;
+            }
+
+            FloatingWindowQuickActions.MoveToMouseMonitor(EnsureNoteWindow(noteData));
+        }
+
+        private void RestoreDefaultSizeForNote_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.MenuItem menuItem || menuItem.Tag is not NoteData noteData)
+            {
+                return;
+            }
+
+            RestoreDefaultSize(noteData);
+        }
+
+        private void RestoreSelectedDefaultSize_Click(object sender, RoutedEventArgs e)
+        {
+            if (WindowListView.SelectedItem is not NoteData noteData)
+            {
+                MessageBox.Show(
+                    "Select a note first.",
+                    "Restore Default Size",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            RestoreDefaultSize(noteData);
         }
 
         private void HideToTray_Click(object sender, RoutedEventArgs e)
@@ -151,7 +236,7 @@ namespace YASN
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-            var settingsWindow = new SettingsWindow
+            SettingsWindow settingsWindow = new SettingsWindow
             {
                 Owner = this
             };
@@ -162,15 +247,25 @@ namespace YASN
         {
             try
             {
-                var dataDirectory = AppPaths.DataDirectory;
+                string dataDirectory = AppPaths.DataDirectory;
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = dataDirectory,
                     UseShellExecute = true
                 });
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
+                AppLogger.Warn($"Failed to open data folder '{AppPaths.DataDirectory}': {ex.Message}");
+                MessageBox.Show(
+                    $"Failed to open data folder: {ex.Message}",
+                    "Open Folder Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                AppLogger.Warn($"Failed to open data folder '{AppPaths.DataDirectory}': {ex.Message}");
                 MessageBox.Show(
                     $"Failed to open data folder: {ex.Message}",
                     "Open Folder Failed",
