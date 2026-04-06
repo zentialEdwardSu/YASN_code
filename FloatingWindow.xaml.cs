@@ -16,6 +16,7 @@ using System.Windows.Threading;
 using Markdig;
 using Microsoft.Web.WebView2.Core;
 using YASN.Logging;
+using YASN.Markdown;
 using YASN.Settings;
 using YASN.WindowLayout;
 using Application = System.Windows.Application;
@@ -1619,7 +1620,7 @@ namespace YASN
             }
         }
 
-        private void TitleBar_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        private void TitleBar_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is not FrameworkElement placementTarget)
             {
@@ -1640,17 +1641,6 @@ namespace YASN
             WindowState = WindowState.Minimized;
         }
 
-
-
-        private void MoreOptions_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not FrameworkElement placementTarget)
-            {
-                return;
-            }
-
-            ShowTitleBarContextMenu(placementTarget);
-        }
 
         private void ShowTitleBarContextMenu(FrameworkElement placementTarget)
         {
